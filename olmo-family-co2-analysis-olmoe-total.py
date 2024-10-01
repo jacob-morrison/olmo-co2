@@ -4,26 +4,28 @@ from pprint import pprint
 import re
 import wandb
 
-api = wandb.Api(timeout=60)
+api = wandb.Api()
 
-project = 'ai2-llm/olmo-small'
-group = "mitchish1"
-# name = "mitchish1"
+project = 'ai2-llm/olmoe'
+# group = "mitchish70-official"
+# name = "olmoe-8x1b-newhp-newds-final"
 
 runs_raw = api.runs(project)
 runs = []
 
 for run in runs_raw:
-    if run.group == group:
+    # if run.group == group:
     # if run.name == name:
-        print()
-        print(f"global_train_batch_size: {run.config['global_train_batch_size']}")
-        print(f"device_train_microbatch_size: {run.config['device_train_microbatch_size']}")
-        print(f"device_train_grad_accum: {run.config['device_train_grad_accum']}")
-        # if run.config['device_train_grad_accum'] == 0:
-            # continue
-        # else:
-        num_gpus = int(run.config['global_train_batch_size'] / (run.config['device_train_microbatch_size'] * run.config['device_train_grad_accum']))
+        # print()
+        # print(f"global_train_batch_size: {run.config['global_train_batch_size']}")
+        # print(f"device_train_microbatch_size: {run.config['device_train_microbatch_size']}")
+        # print(f"device_train_grad_accum: {run.config['device_train_grad_accum']}")
+        if "device_train_grad_accum" not in run.config or run.config['device_train_grad_accum'] == 0:
+            continue
+        else:
+            num_gpus = int(run.config['global_train_batch_size'] / (run.config['device_train_microbatch_size'] * run.config['device_train_grad_accum']))
+            if num_gpus != 256:
+                continue
         runs.append((num_gpus, run))
         print(f"Group: {run.group}")
         print(f"Name: {run.name}")
@@ -35,8 +37,8 @@ kwh = 0.
 gpu_hours = 0.
 
 key_regex = re.compile(r'system\.gpu\..\.powerWatts')
-sequential_data = []
 
+sequential_data = []
 all_keys = set()
 for (num_gpus, run) in runs:
     power_keys_list = []
@@ -81,8 +83,7 @@ for (num_gpus, run) in runs:
                     wattage[key] = 0.
                 wattage[key] += weighted_watts
 
-    print()
-    # print(wattage)
+    print(wattage)
 
     total_watts = 0.
     for key in wattage:
@@ -101,5 +102,6 @@ print(f'Total gpu hours: {gpu_hours / 3600}')
 print(f'Total kwh: {kwh}')
 df = pd.DataFrame.from_dict(sequential_data)
 print(df)
-df.to_csv("dataframes/1b-power.csv")
+df.to_csv("dataframes/olmoe-power.csv")
+
 # print(all_keys)

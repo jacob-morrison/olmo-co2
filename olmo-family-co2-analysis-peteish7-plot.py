@@ -4,10 +4,10 @@ from pprint import pprint
 import re
 import wandb
 
-api = wandb.Api(timeout=60)
+api = wandb.Api()
 
-project = 'ai2-llm/olmo-small'
-group = "mitchish1"
+project = 'ai2-llm/olmo-medium'
+group = "peteish7"
 # name = "mitchish1"
 
 runs_raw = api.runs(project)
@@ -35,6 +35,7 @@ kwh = 0.
 gpu_hours = 0.
 
 key_regex = re.compile(r'system\.gpu\..\.powerWatts')
+
 sequential_data = []
 
 all_keys = set()
@@ -99,7 +100,10 @@ for (num_gpus, run) in runs:
 print()
 print(f'Total gpu hours: {gpu_hours / 3600}')
 print(f'Total kwh: {kwh}')
+
+print("Creating dataframe")
 df = pd.DataFrame.from_dict(sequential_data)
 print(df)
-df.to_csv("dataframes/1b-power.csv")
+df.to_csv("dataframes/peteish-power.csv")
+
 # print(all_keys)

@@ -3,46 +3,56 @@ import pandas as pd
 from pprint import pprint
 import re
 import wandb
+import json
 
-api = wandb.Api(timeout=30)
+api = wandb.Api(timeout=60)
 
-project = 'ai2-llm/olmoe'
-# group = "mitchish70-official"
-name = "olmoe-8x1b-newhp-newds-final"
+project = 'ai2-llm/olmo-small'
+# group = "mitchish1"
+# name = "mitchish1"
 
 runs_raw = api.runs(project)
 runs = []
+groups = set()
 
 for run in runs_raw:
     # if run.group == group:
-    if run.name == name:
-        # print()
-        # print(f"global_train_batch_size: {run.config['global_train_batch_size']}")
-        # print(f"device_train_microbatch_size: {run.config['device_train_microbatch_size']}")
-        # print(f"device_train_grad_accum: {run.config['device_train_grad_accum']}")
-        if run.config['device_train_grad_accum'] == 0:
+    # if run.name == name:
+        print()
+        if "global_train_batch_size" not in run.config or \
+                "global_train_batch_size" not in run.config or \
+                    "device_train_grad_accum" not in run.config or \
+                        run.config['device_train_grad_accum'] == 0:
             continue
-        else:
-            num_gpus = int(run.config['global_train_batch_size'] / (run.config['device_train_microbatch_size'] * run.config['device_train_grad_accum']))
-            if num_gpus != 256:
-                continue
-        runs.append((num_gpus, run))
-        print(f"Group: {run.group}")
-        print(f"Name: {run.name}")
+        print(f"global_train_batch_size: {run.config['global_train_batch_size']}")
+        print(f"device_train_microbatch_size: {run.config['device_train_microbatch_size']}")
+        print(f"device_train_grad_accum: {run.config['device_train_grad_accum']}")
+        # else:
+        num_gpus = int(run.config['global_train_batch_size'] / (run.config['device_train_microbatch_size'] * run.config['device_train_grad_accum']))
+        try:
+            meta = json.load(run.file("wandb-metadata.json").download(replace=True))
+        except:
+            continue
+        if "gpu_devices" in meta and len(meta["gpu_devices"]) > 0 and "name" in meta["gpu_devices"][0] and "H100" in meta["gpu_devices"][0]["name"]:
+            runs.append((num_gpus, run))
+            groups.add(run.group)
+            print(f"Group: {run.group}")
+            print(f"Name: {run.name}")
 
 # pprint(runs)
 # quit()
+            
+print(groups)
 
 kwh = 0.
 gpu_hours = 0.
 
 key_regex = re.compile(r'system\.gpu\..\.powerWatts')
 
-sequential_data = []
 all_keys = set()
 for (num_gpus, run) in runs:
+    power_keys_list = []
     try:
-        power_keys_list = []
         for i, row in run.history(stream="events").iterrows():
             # print(run.name)
             power_keys = {}
@@ -55,17 +65,6 @@ for (num_gpus, run) in runs:
             if len(power_keys) > 0:
                 # print(power_keys['_timestamp'])
                 power_keys_list.append(power_keys)
-                sequential_data.append({
-                    'timestamp': power_keys['_timestamp'],
-                    'GPU 0': power_keys['system.gpu.0.powerWatts'],
-                    'GPU 1': power_keys['system.gpu.1.powerWatts'],
-                    'GPU 2': power_keys['system.gpu.2.powerWatts'],
-                    'GPU 3': power_keys['system.gpu.3.powerWatts'],
-                    'GPU 4': power_keys['system.gpu.4.powerWatts'],
-                    'GPU 5': power_keys['system.gpu.5.powerWatts'],
-                    'GPU 6': power_keys['system.gpu.6.powerWatts'],
-                    'GPU 7': power_keys['system.gpu.7.powerWatts'],
-                })
 
         if len(power_keys_list) == 0:
             continue
@@ -84,7 +83,8 @@ for (num_gpus, run) in runs:
                         wattage[key] = 0.
                     wattage[key] += weighted_watts
 
-        print(wattage)
+        print()
+        # print(wattage)
 
         total_watts = 0.
         for key in wattage:
@@ -97,14 +97,11 @@ for (num_gpus, run) in runs:
 
         kwh += total_kwh * (num_gpus / 8)
     except:
-        print(f"failed run: {run.name}")
+        print(f"failed run read: {run.name}")
 
 # Coreweave, on the east coast
 print()
 print(f'Total gpu hours: {gpu_hours / 3600}')
 print(f'Total kwh: {kwh}')
-df = pd.DataFrame.from_dict(sequential_data)
-print(df)
-df.to_csv("dataframes/olmoe-power.csv")
 
 # print(all_keys)
