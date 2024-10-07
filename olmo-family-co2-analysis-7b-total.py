@@ -39,8 +39,11 @@ for run in runs_raw:
             print(f"Group: {run.group}")
             print(f"Name: {run.name}")
 
-print()
-print(groups)
+pprint(len(runs))
+quit()
+
+# print()
+# print(groups)
 # quit()
 
 # pprint(runs)

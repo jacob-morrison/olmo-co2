@@ -5,8 +5,8 @@ import pandas as pd
 from pprint import pprint 
 import numpy as np
 
-df = pd.read_csv("dataframes/20m-power.csv")
-df["Average Power"] = df.apply(lambda row: np.mean([
+df = pd.read_csv("dataframes/peteish-power.csv")
+df["Average GPU Power"] = df.apply(lambda row: np.mean([
         row["GPU 0"],
         row["GPU 1"],
         row["GPU 2"],
@@ -24,8 +24,17 @@ print(df)
 df_subsampled = df.iloc[::1000, :]
 print(df_subsampled)
 
+fig, ax1 = plt.subplots()
+
+ax1.set_xlabel("Logging Step")
+ax1.set_xlabel(ax1.get_xlabel(), fontsize=14)
+ax1.set_ylabel(ax1.get_ylabel(), fontsize=14)
+
+# Increase fontsize for tick labels
+ax1.tick_params(axis='both', which='major', labelsize=12)
+
 # sns.lineplot(x=df_subsampled.index, y="Average Power", data=df_subsampled)
-sns.lineplot(x=df.index, y="Average Power", data=df)
-plt.xlim(0, 50)
+sns.lineplot(x=df.index, y="Average GPU Power", ax=ax1, data=df)
+plt.xlim(0, 300)
 plt.ylim(0, 800)
 plt.show()

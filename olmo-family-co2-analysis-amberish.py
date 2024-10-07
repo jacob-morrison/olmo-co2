@@ -28,8 +28,10 @@ for run in runs_raw:
         print(f"Group: {run.group}")
         print(f"Name: {run.name}")
 
-# pprint(runs)
-# quit()
+pprint(len(runs))
+quit()
+
+sequential_data = []
 
 kwh = 0.
 gpu_hours = 0.
@@ -51,6 +53,17 @@ for (num_gpus, run) in runs:
         if len(power_keys) > 0:
             # print(power_keys['_timestamp'])
             power_keys_list.append(power_keys)
+            sequential_data.append({
+                'timestamp': power_keys['_timestamp'],
+                'GPU 0': power_keys['system.gpu.0.powerWatts'],
+                'GPU 1': power_keys['system.gpu.1.powerWatts'],
+                'GPU 2': power_keys['system.gpu.2.powerWatts'],
+                'GPU 3': power_keys['system.gpu.3.powerWatts'],
+                'GPU 4': power_keys['system.gpu.4.powerWatts'],
+                'GPU 5': power_keys['system.gpu.5.powerWatts'],
+                'GPU 6': power_keys['system.gpu.6.powerWatts'],
+                'GPU 7': power_keys['system.gpu.7.powerWatts'],
+            })
 
     if len(power_keys_list) == 0:
         continue
@@ -87,5 +100,10 @@ for (num_gpus, run) in runs:
 print()
 print(f'Total gpu hours: {gpu_hours / 3600}')
 print(f'Total kwh: {kwh}')
+
+print("Creating dataframe")
+df = pd.DataFrame.from_dict(sequential_data)
+print(df)
+df.to_csv("dataframes/amberish-power.csv")
 
 # print(all_keys)

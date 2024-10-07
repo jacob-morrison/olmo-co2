@@ -28,8 +28,8 @@ for run in runs_raw:
         print(f"Group: {run.group}")
         print(f"Name: {run.name}")
 
-# pprint(runs)
-# quit()
+pprint(len(runs))
+quit()
 
 kwh = 0.
 gpu_hours = 0.
