@@ -1,0 +1,141 @@
+import math
+import pandas as pd
+from pprint import pprint
+import re
+import wandb
+from collections import Counter
+
+api = wandb.Api(timeout=600)
+
+project = 'ai2-llm/open_instruct_internal'
+# group = "OLMo25"
+name = "olmo3_dpo_0711_rl_fun_mix_fix_28617__1__1763680730"
+
+runs_raw = api.runs(project)
+runs = []
+cluster_counts = Counter()
+for run in runs_raw:
+    # if run.group == group:
+    if run.name == name:
+        # print()
+        # print(run.config)
+        # clusters = run.config['launch']['clusters']
+        # if len(clusters) > 1:
+        #     print(clusters)
+        # else:
+        #     cluster_counts[clusters[0]] += 1
+        # if "global_batch_size" not in run.config["data_loader"] or "rank_microbatch_size" not in run.config['train_module']:
+        #     print(run.config)
+        #     print()
+        #     quit()
+        # print(f"global_batch_size: {run.config['data_loader']['global_batch_size']}")
+        # print(f"rank_microbatch_size: {run.config['train_module']['rank_microbatch_size']}")
+        # if run.config['device_train_grad_accum'] == 0:
+            # continue
+        # else:
+        # num_gpus = int(run.config['data_loader']['global_batch_size'] / (run.config['train_module']['rank_microbatch_size'])) * 4
+        num_gpus = 16
+        runs.append((num_gpus, run))
+        print(f"Group: {run.group}")
+        print(f"Name: {run.name}")
+
+print(cluster_counts)
+# quit()
+# pprint(len(runs))
+# quit()
+
+kwh = 0.
+gpu_hours = 0.
+
+key_regex = re.compile(r'system\.gpu\..\.powerWatts')
+sequential_data = []
+
+# --- Token calculation ---
+bsz = 64   # --num_unique_prompts_rollout
+group_size = 8  # --num_samples_per_prompt_rollout
+
+total_tokens = 0
+steps_counted = 0
+# after the runs_raw loop...
+
+for (num_gpus, matched_run) in runs:
+    total_tokens = 0
+    steps_counted = 0
+    for row in matched_run.scan_history(keys=["val/sequence_lengths"]):
+        filtered = row.get("batch/filtered_prompts", 0)
+        seq_len = row.get("val/sequence_lengths")
+        if seq_len is not None:
+            step_tokens = seq_len * ((filtered + bsz) * group_size)
+            total_tokens += step_tokens
+            steps_counted += 1
+
+    print(f"Steps with both metrics: {steps_counted}")
+    print(f"Total tokens generated: {total_tokens:,.0f}")
+    print(f"Total tokens (billions): {total_tokens / 1e9:.2f}B")
+
+all_keys = set()
+for (num_gpus, run) in runs:
+    power_keys_list = []
+    for i, row in run.history(stream="events").iterrows():
+        # print(run.name)
+        power_keys = {}
+        for key in row.keys():
+            all_keys.add(key)
+            if key_regex.search(key) and not math.isnan(row[key]):
+                power_keys[key] = row[key]
+                # print(row[key])
+                power_keys['_timestamp'] = row['_timestamp'] # in seconds?
+        if len(power_keys) > 0:
+            # print(power_keys['_timestamp'])
+            power_keys_list.append(power_keys)
+            sequential_data.append({
+                'timestamp': power_keys['_timestamp'],
+                'GPU 0': power_keys['system.gpu.0.powerWatts'],
+                'GPU 1': power_keys['system.gpu.1.powerWatts'],
+                'GPU 2': power_keys['system.gpu.2.powerWatts'],
+                'GPU 3': power_keys['system.gpu.3.powerWatts'],
+                'GPU 4': power_keys['system.gpu.4.powerWatts'],
+                'GPU 5': power_keys['system.gpu.5.powerWatts'],
+                'GPU 6': power_keys['system.gpu.6.powerWatts'],
+                'GPU 7': power_keys['system.gpu.7.powerWatts'],
+            })
+
+    if len(power_keys_list) == 0:
+        continue
+    start_time = power_keys_list[-1]['_timestamp']
+    end_time = power_keys_list[0]['_timestamp']
+    total_time = start_time - end_time
+    
+    gpu_hours += total_time * num_gpus
+
+    wattage = {}
+    for i in range(1, len(power_keys_list)):
+        for key in power_keys_list[i]:
+            if key_regex.search(key):
+                weighted_watts = power_keys_list[i][key] * (power_keys_list[i]['_timestamp'] - power_keys_list[i-1]['_timestamp'])
+                if key not in wattage:
+                    wattage[key] = 0.
+                wattage[key] += weighted_watts
+
+    print()
+    # print(wattage)
+
+    total_watts = 0.
+    for key in wattage:
+        total_watts += wattage[key]
+
+    print(f'Total time in hours for this job: {total_time / 3600}')
+    print(f'Total kw seconds: {total_watts / 1000}')
+    total_kwh = (total_watts / 1000) / 3600
+    print(f'Total kwh: {total_kwh}')
+
+    kwh += total_kwh * (num_gpus / 8)
+
+# Coreweave, on the east coast
+print()
+print(f'Total gpu hours: {gpu_hours / 3600}')
+print(f'Total kwh: {kwh}')
+df = pd.DataFrame.from_dict(sequential_data)
+print(df)
+df.to_csv("dataframes/1b-power.csv")
+# print(all_keys)
